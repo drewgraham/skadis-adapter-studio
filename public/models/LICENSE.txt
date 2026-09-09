@@ -1,0 +1,15 @@
+Licence summary
+
+The generator source, generated adapter and coupon STLs, diagrams,
+documentation, and Line Arc Line seat geometry are distributed under Creative
+Commons Attribution 4.0 International (CC BY 4.0):
+
+https://creativecommons.org/licenses/by/4.0/
+
+The two tchoupshop low-profile flush T-Clip STLs are distributed under
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0):
+
+https://creativecommons.org/licenses/by-sa/4.0/
+
+See ATTRIBUTION.md for file-level authorship, source links, and modification
+notes.

@@ -1,0 +1,9 @@
+.git
+node_modules
+.next
+out
+dist
+.sites-runtime
+.wrangler
+.env*
+*.tar.gz
