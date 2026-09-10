@@ -3,8 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1 COOKIE_STATIC=1
-RUN npx next build --webpack
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm test && npm run build
 
 FROM nginx:stable-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf

@@ -93,7 +93,7 @@ Use Node.js 22.13 or newer and npm. Install the locked dependencies:
 
 ```sh
 npm ci
-npx next dev --webpack
+npm run dev
 ```
 
 Open **http://localhost:3000**.
@@ -101,22 +101,22 @@ Open **http://localhost:3000**.
 To produce the same static export used by Docker, on a POSIX shell:
 
 ```sh
-COOKIE_STATIC=1 npx next build --webpack
+npm run build
 ```
 
-The files are written to `out/`. `COOKIE_STATIC` is the existing build flag for standalone static hosting. Serve the output using a web server with JavaScript module and WebAssembly MIME types; opening the HTML directly from disk will not work.
+The files are written to `out/`. Serve the output using a web server with JavaScript module and WebAssembly MIME types; opening the HTML directly from disk will not work.
 
-The repository also retains its original Sites/Vinext build configuration. `npm run dev`, `npm run build` and `npm start` use that path, not the standalone Next.js commands above.
+The application is a static export. Use Docker/Nginx for production hosting; `next start` is not applicable.
 
 ### Checks
 
-After installing dependencies, run the geometry and component checks:
+After installing dependencies, run the geometry checks:
 
 ```sh
-node --test tests/adapter-geometry.test.mjs tests/ui-components.test.mjs
+npm test
 ```
 
-The separate `rendered-html.test.mjs` is a legacy Sites Worker test, not a test of the Docker static export.
+`npm run build` also checks TypeScript and generates the production pages. Docker runs the geometry tests before building.
 
 ## Project layout
 
@@ -125,7 +125,7 @@ The separate `rendered-html.test.mjs` is a legacy Sites Worker test, not a test 
 - `lib/` — configuration and export helpers.
 - `public/cad/` — geometry generation, worker and WebAssembly assets.
 - `public/models/` — CAD source, model assets and attribution.
-- `tests/` — geometry, component and legacy Worker checks.
+- `tests/` — geometry checks.
 - `Dockerfile`, `nginx.conf` — standalone static hosting.
 
 ## Safety and support
