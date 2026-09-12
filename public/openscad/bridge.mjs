@@ -1,4 +1,5 @@
 import {checkConnected} from './mesh-check.mjs';
+import {cleanMesh} from './clean-mesh.mjs';
 // The frontend passes measurements, not computed placement or frame links.
 const parameters = {
   clip_count:'clipCount', positioning_rule:'positioningRule',keep_clips_inside:'keepClipsInside',
@@ -55,6 +56,10 @@ export async function renderScad(init,assets,config,{planOnly=false}={}){
   if(!planOnly){
     const summary=JSON.parse(module.FS.readFile('/summary.json',{encoding:'utf8'}));
     if(summary.geometry?.simple!==true)throw Error('OpenSCAD did not produce a valid closed solid.');
+    const cleaned=cleanMesh(result.triangles);
+    result.triangles=cleaned.triangles;
+    result.volume=cleaned.volume;
+    result.exportCleanup={removedTriangles:cleaned.removed};
     result.bodies=checkConnected(result.triangles);
   }
   return {...result,plan:{feet,pegs,clips,links},source,timings:{startupMs:initialized-start,renderMs:rendered-initialized,decodeMs:performance.now()-rendered},logs};

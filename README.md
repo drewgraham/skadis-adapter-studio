@@ -20,6 +20,9 @@ the rendered coordinates while OpenSCAD continues checking clearances.
 The browser exports exactly the triangles rendered by OpenSCAD.
 OpenSCAD's native geometry summary must report a valid closed solid. A lightweight
 connectivity check rejects disconnected results without loading a second CAD engine.
+Before preview/export, sub-micron STL coordinate noise is canonicalized and zero-area
+triangles are removed. Every remaining edge must join exactly two oppositely oriented
+faces; exports with holes or non-manifold edges are rejected, not silently patched.
 The former JS positioning/generation code, its Manifold runtime and comparison UI
 have been removed. OpenSCAD still uses its own compiled-in Manifold backend.
 

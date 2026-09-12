@@ -1,5 +1,5 @@
-// Connectivity check only; closed-solid validity comes from OpenSCAD's native
-// geometry summary. No geometry creation or second CAD runtime is used here.
+// Connectivity check, used alongside native solid and cleaned STL edge checks.
+// No geometry creation or second CAD runtime is used here.
 export function checkConnected(triangles){
   if(!Array.isArray(triangles)||!triangles.length)throw Error('Empty mesh.');
   const lookup=new Map(),parent=[];
