@@ -1,5 +1,5 @@
 import init from './openscad.js';
-import {renderScad} from './bridge.mjs';
+import {renderScad} from './bridge.mjs?v=mesh-clean-1';
 import {footSpacingErrors} from '../cad/constraints.mjs';
 let assetsPromise;
 async function fetchFile(url,binary=false){const r=await fetch(url);if(!r.ok)throw Error('A model file could not load. Reload to retry.');return binary?r.arrayBuffer():r.text();}

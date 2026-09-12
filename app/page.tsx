@@ -127,7 +127,7 @@ export default function Home(){
     return()=>lifecycle.abort();
   },[]);
   const issues=useMemo(()=>validateConfig(config),[config]);
-  useEffect(()=>{const w=new Worker('/openscad/worker.mjs',{type:'module'});worker.current=w;
+  useEffect(()=>{const w=new Worker('/openscad/worker.mjs?v=mesh-clean-1',{type:'module'});worker.current=w;
     w.onmessage=({data})=>{if(data.id!==revision.current)return;if(pendingTimer.current)clearTimeout(pendingTimer.current);if(data.error){setError(data.error);setSeatStatus('error');setResult(null);}else{data.timings.roundTripMs=performance.now()-sentAt.current;setResult(data);setError('');setSeatStatus('ready');}};
     w.onerror=()=>{if(pendingTimer.current)clearTimeout(pendingTimer.current);setError('The model could not be generated. Choose Retry model to try again.');setSeatStatus('error');};
     return()=>{w.terminate();worker.current=null;if(pendingTimer.current)clearTimeout(pendingTimer.current);};},[epoch]);
