@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SKÅDIS Adapter Studio",
-  description: "Configure, preview and download a parametric IKEA SKÅDIS adapter with keyhole pegs and foot supports.",
+  description: "Configure SKÅDIS adapters with automatic clip positioning and download printable STL and OpenSCAD files.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

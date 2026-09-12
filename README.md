@@ -1,154 +1,60 @@
 # SKÅDIS Adapter Studio
 
-A browser-based tool for designing 3D-printable adapters for objects with keyhole mounting pegs and optional supporting feet. Adjust the dimensions, inspect the live model, and download STL or OpenSCAD files.
+A browser-based configurator for printable SKÅDIS adapters.
+OpenSCAD WASM handles automatic clip positioning, frame links and solid generation.
+JavaScript handles the interface, parameters, preview and downloads—not CAD generation.
 
-Independent hobby project; not affiliated with or endorsed by IKEA.
+## Using it
 
-## Features
+Change dimensions or placement rules; rendering starts after a 400 ms debounce.
+If rendering fails, choose Retry model to start a fresh render.
+A 30-second watchdog stops excessive renders. No model data is uploaded.
 
-- One or two mounting pegs, with optional foot cradles.
-- Linked frame or full supporting back.
-- Configurable T-Clip placement on the SKÅDIS grid.
-- Interactive 3D preview with rotation and zoom.
-- STL generation in a browser worker using Manifold WebAssembly.
-- OpenSCAD export and separately downloadable clip geometry.
+Manual grid starts from the most recently rendered OpenSCAD positions.
+Changing clip count while in manual mode switches to Automatic compact; after
+rendering, select Manual grid again to edit the new positions. Locking freezes
+the rendered coordinates while OpenSCAD continues checking clearances.
 
-Model generation runs in your browser. Dimensions and generated models are not uploaded by the application. Your hosting provider may still keep ordinary web request logs.
+## Validation and exports
 
-## Quick start with Docker
+The browser exports exactly the triangles rendered by OpenSCAD.
+OpenSCAD's native geometry summary must report a valid closed solid. A lightweight
+connectivity check rejects disconnected results without loading a second CAD engine.
+The former JS positioning/generation code, its Manifold runtime and comparison UI
+have been removed. OpenSCAD still uses its own compiled-in Manifold backend.
 
-Install Docker, download or clone this repository, and run these commands from its root:
+Downloaded SCAD includes the automatic rules. Save the separately downloaded
+`tclip_clip_seat.stl` alongside it. Models remain experimental, un-rated and require
+fit/strength testing; mesh validity is not a safety certification.
 
-```sh
-docker build -t skadis-adapter-studio .
-docker run --rm --name skadis -p 127.0.0.1:8080:80 skadis-adapter-studio
-```
-
-Open **http://localhost:8080**. Stop the container with Ctrl+C.
-
-The image builds the application with Next.js and serves the static output with Nginx. No database, API key or account is required. The included Nginx configuration serves JavaScript modules and WebAssembly with the correct content types.
-
-## Docker Compose
-
-Create a `compose.yml` in the repository root:
-
-```yaml
-services:
-  skadis:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:80"
-```
-
-Start or rebuild it with:
-
-```sh
-docker compose up -d --build
-```
-
-### Behind Traefik
-
-If you already run Traefik, replace the example above with:
-
-```yaml
-services:
-  skadis:
-    build: .
-    restart: unless-stopped
-    networks:
-      - proxy
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=proxy
-      - traefik.http.routers.skadis.rule=Host(`skadis.example.com`)
-      - traefik.http.routers.skadis.entrypoints=websecure
-      - traefik.http.routers.skadis.tls=true
-      - traefik.http.routers.skadis.tls.certresolver=letsencrypt
-      - traefik.http.services.skadis.loadbalancer.server.port=80
-
-networks:
-  proxy:
-    external: true
-```
-
-Replace the hostname, network, entry point and certificate resolver with your own values. Traefik must share that network, have its Docker provider enabled, and already be configured for certificate issuance. Configure DNS and inbound routing for your hostname separately.
-
-Serve the app at the root of its hostname, rather than a subdirectory: the CAD worker and model assets use root-relative URLs.
-
-## Using the designer
-
-1. Measure the object's peg spacing, peg dimensions and foot positions.
-2. Choose the base construction, peg count and whether foot supports are needed.
-3. Adjust the clip placement and dimensions; wait for **Solid model ready**.
-4. Rotate and inspect the preview, then download the STL for your slicer.
-5. For the OpenSCAD source, also download the T-Clip seat geometry and keep it alongside the source file.
-6. Download and print the separate clips as required for your configuration.
-
-The preview confirms that geometry was generated; it is not a strength or safety assessment.
-
-## Local development
-
-Use Node.js 22.13 or newer and npm. Install the locked dependencies:
+## Development
 
 ```sh
 npm ci
 npm run dev
-```
-
-Open **http://localhost:3000**.
-
-To produce the same static export used by Docker, on a POSIX shell:
-
-```sh
+npm test
 npm run build
 ```
 
-The files are written to `out/`. Serve the output using a web server with JavaScript module and WebAssembly MIME types; opening the HTML directly from disk will not work.
+Tests retain 64 approved layout fixtures (captured before removing the old engine),
+exercise seven full OpenSCAD renders, manual/locked coordinates, and rejection paths.
+No retired engine is needed to run them. Static output is `out/`.
 
-The application is a static export. Use Docker/Nginx for production hosting; `next start` is not applicable.
+The read-only `read_adapter_benchmark` WebMCP tool returns the current configuration,
+status and render timings when supported.
 
-### Checks
-
-After installing dependencies, run the geometry checks:
+## Docker
 
 ```sh
-npm test
+docker build -t skadis-adapter-studio .
+docker run --rm -p 8080:80 skadis-adapter-studio
 ```
 
-`npm run build` also checks TypeScript and generates the production pages. Docker runs the geometry tests before building.
+Open http://localhost:8080. The image serves the static app with nginx.
 
-## Project layout
+## Licensing
 
-- `app/` — interface, styles and safety notice.
-- `components/` — controls and reusable UI.
-- `lib/` — configuration and export helpers.
-- `public/cad/` — geometry generation, worker and WebAssembly assets.
-- `public/models/` — CAD source, model assets and attribution.
-- `tests/` — geometry checks.
-- `Dockerfile`, `nginx.conf` — standalone static hosting.
-
-## Safety and support
-
-The tool and generated files are experimental design aids, not engineering advice or certified products. No load rating is provided. Check dimensions, materials, print quality, fixings and compatibility. Safely test each finished part before use and inspect it regularly.
-
-Do not use printed adapters for safety-critical purposes, overhead loads or where failure could cause injury. Heat, ageing and sustained loads can weaken printed parts. Print settings are starting points, not guarantees.
-
-To the extent permitted by law, this tool and its generated files are provided “as is” and “as available”, without warranty of accuracy, reliability or fitness for a particular purpose. No technical support, maintenance, updates or continued availability are promised.
-
-## Contributing
-
-Bug reports and improvements are welcome. Include steps to reproduce, the relevant dimensions and browser details when reporting a problem. For geometry changes, add or update focused checks and describe the effect on generated models. Do not include private information or credentials.
-
-## Licence
-
-Original application code and hosting configuration are licensed under the [MIT License](LICENSE), copyright © 2026 Andrew Graham. MIT permits commercial use, including paid hosting, subject to its notice requirements.
-
-Separately licensed material retains its existing terms:
-
-- The OpenSCAD generator, generated model examples, associated CAD documentation and Line Arc Line seat geometry retain their CC BY 4.0 notices.
-- The two tchoupshop low-profile clip models retain CC BY-SA 4.0.
-- See [CAD licence details](public/models/LICENSE.txt) and [attribution](public/models/ATTRIBUTION.md), including for duplicate model files elsewhere in this repository.
-- Dependencies and vendored code retain their upstream licences, including the [vendored stylesheet licence](vendor/shadcn-tailwind-4.13.0.LICENSE.md).
-
-IKEA and SKÅDIS names describe compatibility only; their respective owners retain their rights.
+Original adapter code remains MIT (`LICENSE`). Model licences are in `public/models/`.
+OpenSCAD has its own GPL licence: see `public/openscad/COPYING` and
+`public/openscad/NOTICE.md`. Preserve upstream licence and corresponding-source
+requirements before wider redistribution.

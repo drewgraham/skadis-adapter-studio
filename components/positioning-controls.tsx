@@ -2,7 +2,6 @@
 import {Button} from '@/components/ui/button';
 import {Switch} from '@/components/ui/switch';
 import {Select,SelectTrigger,SelectValue,SelectContent,SelectItem} from '@/components/ui/select';
-import {layout} from '@/public/cad/geometry.mjs';
 import type {AdapterConfig} from '@/lib/model';
 
 const rules=[
@@ -17,20 +16,18 @@ export function PositioningControls({config,onChange,positions,ready}:{config:Ad
   const labels=Array.from({length:config.clipCount},(_,i)=>`Clip ${i+1}`);
   const changeCount=(value:string)=>{
     const clipCount=Number(value) as AdapterConfig['clipCount'];
-    let manualClips:[number,number][];
-    try{manualClips=layout({...config,clipCount,lockedClips:null,positioningRule:'compact'}).clips;}
-    catch{manualClips=[[-20,0],[20,0],[-60,-40],[60,-40]].slice(0,clipCount) as [number,number][];}
-    onChange({...config,clipCount,manualClips,lockedClips:null});
+    onChange({...config,clipCount,lockedClips:null,
+      positioningRule:config.positioningRule==='manual'?'compact':config.positioningRule});
   };
   const clone=(p:[number,number][])=>p.map(v=>[...v] as [number,number]);
   return <section className="control-group positioning-controls">
     <h3>SKÅDIS positioning</h3>
     <label className="select-field"><span>Number of clips</span><Select value={String(config.clipCount)} disabled={locked} onValueChange={changeCount}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{[1,2,3,4].map(n=><SelectItem key={n} value={String(n)}>{n} {n===1?'clip':'clips'}</SelectItem>)}</SelectContent></Select></label>
     <p className="position-help">{locked?'Unlock positions to change the clip count.':config.clipCount===1?'One mount offers limited resistance to twisting.':config.clipCount===3?'Two mirrored upper mounts and one centred lower mount form a triangle.':'Four clips remain the default for the charger.'}</p>
-    {config.positioningRule==='manual'&&<p className="position-help">Changing the count resets manual coordinates to an automatic starting layout.</p>}
+    {config.positioningRule==='manual'&&<p className="position-help">Changing the count switches to Automatic compact. Select Manual grid again after rendering to edit the new positions.</p>}
     <Select value={config.positioningRule} disabled={locked} onValueChange={rule=>onChange({...config,positioningRule:rule as AdapterConfig['positioningRule'],manualClips:rule==='manual'&&positions?clone(positions):config.manualClips})}>
       <SelectTrigger aria-label="SKÅDIS positioning rule" className="w-full"><SelectValue/></SelectTrigger>
-      <SelectContent>{rules.map(([value,label])=><SelectItem value={value} key={value}>{label}</SelectItem>)}</SelectContent>
+      <SelectContent>{rules.map(([value,label])=><SelectItem value={value} key={value} disabled={value==='manual'&&!ready&&config.positioningRule!=='manual'}>{label}</SelectItem>)}</SelectContent>
     </Select>
     <p className="position-help">{config.clipCount===1&&config.positioningRule!=='manual'&&config.positioningRule!=='peg-row'?'With one clip, automatic rules prefer the centreline.':rules.find(r=>r[0]===config.positioningRule)?.[2]}</p>
     <label className="position-toggle"><span>Keep clips inside foot centres<small>{config.feetEnabled?'Clip centres stay between the left and right foot centres.':'Available when foot supports are on.'}</small></span><Switch disabled={!config.feetEnabled} checked={config.feetEnabled&&config.keepClipsInside} onCheckedChange={keepClipsInside=>onChange({...config,keepClipsInside})}/></label>

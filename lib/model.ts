@@ -90,28 +90,3 @@ export function validateConfig(cfg: AdapterConfig) {
   if (Math.abs(cfg.plateThickness - 5.4) > 0.01) issues.push("The supplied T-Clip seat requires a 5.4 mm plate.");
   return issues;
 }
-
-export function configuredScad(source: string, cfg: AdapterConfig, plan: any) {
-  const replacements: Record<string, string | number> = {
-    base_style: `"${cfg.baseStyle}"`,
-    peg_center_spacing: cfg.pegSpacing,
-    foot_centres_x: cfg.footSpacingX,
-    foot_centres_y: cfg.footSpacingY,
-    foot_above_seated_peg: cfg.footOffsetY,
-    peg_shaft_diameter: cfg.pegShaftDiameter,
-    peg_head_diameter: cfg.pegHeadDiameter,
-    peg_head_thickness: cfg.pegHeadThickness,
-    peg_protrusion: cfg.pegProtrusion,
-    foot_diameter: cfg.footDiameter,
-    foot_radial_clearance: cfg.footClearance,
-    cradle_wall: cfg.cradleWall,
-    cradle_depth: cfg.cradleDepth,
-    plate_thickness: cfg.plateThickness,
-  };
-  let result = source.replace(/^layout_mode\s*=.*?;/m,'layout_mode = "custom";');
-  for(const [key,value] of Object.entries({custom_peg_positions:plan.pegs,custom_foot_positions:plan.feet,custom_tclip_positions:plan.clips,custom_frame_links:plan.links}))result=result.replace(new RegExp('^'+key+'\\s*=[\\s\\S]*?;', 'm'),key+' = '+JSON.stringify(value)+';');
-  for (const [key, value] of Object.entries(replacements)) {
-    result = result.replace(new RegExp(`^${key}\\s*=.*?;`, "m"), `${key} = ${value};`);
-  }
-  return result;
-}

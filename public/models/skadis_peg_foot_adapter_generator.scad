@@ -9,7 +9,17 @@
 /* [Output] */
 part = "adapter"; // [adapter,peg_coupon,foot_coupon,tclip_coupon]
 base_style = "linked"; // [linked,full]
-layout_mode = "symmetric"; // [symmetric,custom]
+layout_mode = "automatic"; // [automatic,symmetric,custom]
+
+/* [Automatic placement] */
+clip_count = 4; // [1,2,3,4]
+positioning_rule = "compact"; // [compact,peg-row,rectangle,wide,manual]
+keep_clips_inside = false;
+peg_count = 2; // [1,2]
+feet_enabled = true;
+lock_clips = false;
+manual_clip_positions = [[-20,0],[20,0],[-60,-40],[60,-40]];
+include <automatic-layout.scad>
 
 /* [Simple symmetric object layout] */
 peg_center_spacing = 89;
@@ -113,10 +123,14 @@ symmetric_frame_links = [
     [symmetric_tclip_positions[3],symmetric_foot_positions[3],clip_pad_radius,foot_pad_radius]
 ];
 
-peg_positions = layout_mode == "symmetric" ? symmetric_peg_positions : custom_peg_positions;
-foot_positions = layout_mode == "symmetric" ? symmetric_foot_positions : custom_foot_positions;
-tclip_positions = layout_mode == "symmetric" ? symmetric_tclip_positions : custom_tclip_positions;
-frame_links = layout_mode == "symmetric" ? symmetric_frame_links : custom_frame_links;
+foot_inner_radius = foot_diameter/2+foot_radial_clearance;
+foot_outer_radius = foot_inner_radius+cradle_wall;
+peg_shaft_length = peg_protrusion-peg_head_thickness;
+peg_positions = layout_mode == "automatic" ? (peg_count==1?[[0,0]]:symmetric_peg_positions) : layout_mode == "symmetric" ? symmetric_peg_positions : custom_peg_positions;
+foot_positions = layout_mode == "automatic" ? (feet_enabled?symmetric_foot_positions:[]) : layout_mode == "symmetric" ? symmetric_foot_positions : custom_foot_positions;
+tclip_positions = layout_mode == "automatic" ? automatic_clips(foot_positions,peg_positions,foot_outer_radius,peg_pad_radius) : layout_mode == "symmetric" ? symmetric_tclip_positions : custom_tclip_positions;
+frame_links = layout_mode == "automatic" ? automatic_links(foot_positions,peg_positions,tclip_positions,foot_outer_radius,peg_pad_radius) : layout_mode == "symmetric" ? symmetric_frame_links : custom_frame_links;
+echo(LAB_PLAN=[foot_positions,peg_positions,tclip_positions,frame_links]);
 all_positions = concat(peg_positions,foot_positions,tclip_positions);
 all_x = [for(p=all_positions) p[0]];
 all_y = [for(p=all_positions) p[1]];
@@ -125,16 +139,12 @@ full_x1 = max(all_x)+full_base_margin;
 full_y0 = min(all_y)-full_base_margin;
 full_y1 = max(all_y)+full_base_margin;
 
-foot_inner_radius = foot_diameter/2+foot_radial_clearance;
-foot_outer_radius = foot_inner_radius+cradle_wall;
-peg_shaft_length = peg_protrusion-peg_head_thickness;
-
 function on_grid(v) = abs(v/skadis_grid_pitch-round(v/skadis_grid_pitch)) < 0.001;
 
 assert(part == "adapter" || part == "peg_coupon" || part == "foot_coupon" || part == "tclip_coupon",
        "part must be adapter, peg_coupon, foot_coupon or tclip_coupon");
 assert(base_style == "linked" || base_style == "full", "base_style must be linked or full");
-assert(layout_mode == "symmetric" || layout_mode == "custom", "layout_mode must be symmetric or custom");
+assert(layout_mode == "automatic" || layout_mode == "symmetric" || layout_mode == "custom", "Unknown layout mode");
 assert(peg_head_diameter > peg_shaft_diameter, "peg head must be wider than its shaft");
 assert(peg_protrusion > peg_head_thickness, "peg protrusion must exceed head thickness");
 assert(abs(plate_thickness-5.4) < 0.01,
@@ -216,6 +226,7 @@ module open_foot_pocket_2d(extra=0) {
 }
 
 module foot_cradle(base_t=plate_thickness) {
+    mouth_bevel = min(cradle_mouth_chamfer,cradle_depth/2);
     rotate([0,0,cradle_rotation])
         translate([0,0,base_t]) difference() {
             translate([0,0,-join_overlap])
@@ -223,10 +234,10 @@ module foot_cradle(base_t=plate_thickness) {
             translate([0,0,-join_overlap-eps])
                 linear_extrude(cradle_depth+join_overlap+2*eps) open_foot_pocket_2d();
             hull() {
-                translate([0,0,cradle_depth-cradle_mouth_chamfer])
+                translate([0,0,cradle_depth-mouth_bevel])
                     linear_extrude(eps) open_foot_pocket_2d();
                 translate([0,0,cradle_depth])
-                    linear_extrude(eps) open_foot_pocket_2d(cradle_mouth_chamfer);
+                    linear_extrude(eps) open_foot_pocket_2d(mouth_bevel);
             }
         }
 }
@@ -234,9 +245,8 @@ module foot_cradle(base_t=plate_thickness) {
 module keyhole_peg(base_t=plate_thickness) {
     root_h = min(peg_root_fillet,peg_shaft_length);
     under_c = min(peg_head_underside_chamfer,
-                  peg_head_thickness-peg_head_top_chamfer-0.2);
-    top_c = min(peg_head_top_chamfer,
-                peg_head_thickness-under_c-0.2);
+                  peg_head_thickness-0.5);
+    top_c = peg_head_top_chamfer;
     middle_h = peg_head_thickness-under_c-top_c;
     support_start_d = min(peg_head_diameter-0.4,peg_shaft_diameter+1);
     union() {
@@ -298,4 +308,3 @@ if(part == "adapter") adapter();
 else if(part == "peg_coupon") peg_coupon();
 else if(part == "foot_coupon") foot_coupon();
 else tclip_coupon();
-

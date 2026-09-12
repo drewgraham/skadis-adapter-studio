@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AdapterConfig, DEFAULT_CONFIG, Triangle, binaryStl, configuredScad, validateConfig } from "@/lib/model";
+import { AdapterConfig, DEFAULT_CONFIG, Triangle, binaryStl, validateConfig } from "@/lib/model";
 
 import {footSpacingLimits} from "@/public/cad/constraints.mjs";
 
@@ -116,22 +116,36 @@ export default function Home(){
   const [config,setConfig]=useState<AdapterConfig>(DEFAULT_CONFIG);
   const [result,setResult]=useState<any>(null), [seatStatus,setSeatStatus]=useState<"loading"|"ready"|"error">("loading"),[error,setError]=useState("");
   const worker=useRef<Worker|null>(null), revision=useRef(0);
+  const [epoch,setEpoch]=useState(0);
+  const pendingTimer=useRef<ReturnType<typeof setTimeout>|null>(null),sentAt=useRef(0);
+  const statusRef=useRef<any>(null);
+  statusRef.current={status:seatStatus,error:error||validateConfig(config).join(' '),config,timings:result?.timings};
+  useEffect(()=>{
+    const context=(document as any).modelContext;if(!context?.registerTool)return;
+    const lifecycle=new AbortController();
+    Promise.resolve(context.registerTool({name:"read_adapter_benchmark",description:"Read the current OpenSCAD adapter configuration, render status, timings.",inputSchema:{type:"object",properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute:(input:any)=>{if(!input||typeof input!=="object"||Object.keys(input).length)throw Error("Expected an empty object.");return structuredClone(statusRef.current);}},{signal:lifecycle.signal})).catch(()=>{});
+    return()=>lifecycle.abort();
+  },[]);
   const issues=useMemo(()=>validateConfig(config),[config]);
-  useEffect(()=>{const w=new Worker('/cad/worker.js?v=9',{type:'module'});worker.current=w;
-    w.onmessage=({data})=>{if(data.id!==revision.current)return;if(data.error){setError(data.error);setSeatStatus('error');setResult(null);}else{setResult(data);setError('');setSeatStatus('ready');}};
-    w.onerror=()=>{setError('The model could not be generated. Reload to retry.');setSeatStatus('error');};
-    return()=>{w.terminate();worker.current=null;};},[]);
+  useEffect(()=>{const w=new Worker('/openscad/worker.mjs',{type:'module'});worker.current=w;
+    w.onmessage=({data})=>{if(data.id!==revision.current)return;if(pendingTimer.current)clearTimeout(pendingTimer.current);if(data.error){setError(data.error);setSeatStatus('error');setResult(null);}else{data.timings.roundTripMs=performance.now()-sentAt.current;setResult(data);setError('');setSeatStatus('ready');}};
+    w.onerror=()=>{if(pendingTimer.current)clearTimeout(pendingTimer.current);setError('The model could not be generated. Choose Retry model to try again.');setSeatStatus('error');};
+    return()=>{w.terminate();worker.current=null;if(pendingTimer.current)clearTimeout(pendingTimer.current);};},[epoch]);
   useEffect(()=>{revision.current++;const id=revision.current;setSeatStatus('loading');setError('');setResult(null);
-    if(issues.length)return;const timer=setTimeout(()=>worker.current?.postMessage({id,config}),250);return()=>clearTimeout(timer);},[config,issues]);
+    if(pendingTimer.current)clearTimeout(pendingTimer.current);
+    if(issues.length){setSeatStatus('error');return;}const timer=setTimeout(()=>{
+      sentAt.current=performance.now();worker.current?.postMessage({id,config});
+      pendingTimer.current=setTimeout(()=>{worker.current?.terminate();setError('Rendering exceeded 30 seconds. Choose Retry model to try again.');setSeatStatus('error');},30000);
+    },400);return()=>clearTimeout(timer);},[config,issues,epoch]);
   const updateNumber=(key:NumericKey,value:number)=>{if(Number.isFinite(value))setConfig(c=>({...c,[key]:value}));};
   const previewTriangles=result?.triangles||[];
   const exportName=`skadis-adapter-${config.pegCount===1?'single-peg':`${config.pegSpacing}mm`}${config.feetEnabled?'':'-no-feet'}`;
   const visibleGroups=groups.map(group=>({...group,fields:group.fields.filter(({key})=>(config.pegCount!==1||key!=='pegSpacing')&&(config.feetEnabled||!key.startsWith('foot')&&!key.startsWith('cradle')))})).filter(group=>group.fields.length);
   const downloadStl=()=>{if(issues.length||seatStatus!=="ready"||!result)return;downloadBlob(binaryStl(result.triangles),`${exportName}.stl`);};
-  const downloadScad=async()=>{try{const response=await fetch("/models/skadis_peg_foot_adapter_generator.scad");if(!response.ok)throw Error();const source=await response.text();downloadBlob(new Blob([configuredScad(source,config,result.plan)],{type:"text/plain"}),`${exportName}.scad`);}catch{setError('Source download failed. Please retry.');}};
+  const downloadScad=()=>{if(result?.source)downloadBlob(new Blob([result.source],{type:"text/plain"}),`${exportName}-automatic.scad`);};
   const approximateWidth=result?result.bounds.max[0]-result.bounds.min[0]:0, approximateHeight=result?result.bounds.max[1]-result.bounds.min[1]:0;
   return <main className="app-shell">
-    <header className="topbar"><div className="brand-mark"><Box/></div><div><h1>SKÅDIS Adapter Studio</h1><p>Keyhole pegs, supporting feet, proven T-Clips.</p></div><div className={`geometry-status ${seatStatus}`}><span/>{seatStatus==="ready"?"Solid model ready":seatStatus==="error"?"Model needs attention":"Updating solid model"}</div></header>
+    <header className="topbar"><div className="brand-mark"><Box/></div><div><h1>SKÅDIS Adapter Studio</h1><p>Configure an adapter for your SKÅDIS board.</p></div><div className={`geometry-status ${seatStatus}`}><span/>{seatStatus==="ready"?"Solid model ready":seatStatus==="error"?"Model needs attention":"Updating solid model"}</div></header>
     <div className="workspace">
       <aside className="controls-panel"><div className="panel-heading"><div><p className="eyebrow">Configure</p><h2>Measured interfaces</h2></div><Button variant="ghost" size="sm" onClick={()=>setConfig(DEFAULT_CONFIG)}>Reset</Button></div>
         <label className="select-field"><span>Base construction</span><Select value={config.baseStyle} onValueChange={value=>setConfig(c=>({...c,baseStyle:value as AdapterConfig["baseStyle"]}))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="linked">Linked load-path frame</SelectItem><SelectItem value="full">Full supporting back</SelectItem></SelectContent></Select></label>
@@ -144,8 +158,8 @@ export default function Home(){
         {visibleGroups.map(group=><section className="control-group" key={group.title}><h3>{group.title}</h3>{group.fields.map(field=><NumberField key={field.key} field={field} minimum={field.key==="footSpacingX"?footSpacingLimits(config).x:field.key==="footSpacingY"?footSpacingLimits(config).y:0} value={config[field.key]} onChange={updateNumber}/>)}</section>)}
         <section className="fixed-mount"><ShieldCheck/><div><strong>{config.clipCount}-point SKÅDIS mount</strong><span>Grid placement · 5.4 mm flush seats</span></div></section>
       </aside>
-      <section className="preview-panel"><div className="preview-toolbar"><div><p className="eyebrow">Live model</p><h2>{config.baseStyle==="linked"?"Linked frame":"Full supporting back"}</h2></div><div className="dimensions"><span><b>{approximateWidth.toFixed(1)}</b> mm wide</span><span><b>{approximateHeight.toFixed(1)}</b> mm high</span><span><b>{(config.plateThickness+Math.max(config.pegProtrusion,config.feetEnabled?config.cradleDepth:0)).toFixed(1)}</b> mm deep</span></div></div><div className="preview-model-wrap"><ModelCanvas triangles={previewTriangles}/>{seatStatus!=="ready"&&<p className="model-message" role="status">{error||issues[0]||"Generating joined frame and T-Clip seats…"}</p>}</div><div className="measurement-strip"><div><span>{config.pegCount===1?'Peg layout':'Peg centres'}</span><strong>{config.pegCount===1?'Single · centred':`${config.pegSpacing.toFixed(2)} mm`}</strong></div><div><span>{config.feetEnabled?'Foot grid':'Foot supports'}</span><strong>{config.feetEnabled?`${config.footSpacingX.toFixed(2)} × ${config.footSpacingY.toFixed(2)} mm`:'Off'}</strong></div><div><span>{config.feetEnabled?'Upper cradle offset':'SKÅDIS mounts'}</span><strong>{config.feetEnabled?`${config.footOffsetY.toFixed(2)} mm`:`${config.clipCount} T-Clips`}</strong></div></div></section>
-      <aside className="output-panel"><div><p className="eyebrow">Export</p><h2>Ready for your slicer</h2><p className="output-copy">The STL is generated locally from the dimensions shown. Nothing is uploaded.</p><p className="safety-note">Experimental models; no load rating. Check fit and strength before use. <a href="#disclaimer">Safety &amp; disclaimer</a></p></div>{error&&<p className="issues" role="alert">{error}</p>}{issues.length>0&&<div className="issues" role="alert">{issues.map(issue=><p key={issue}>{issue}</p>)}</div>}<Button className="download-primary" size="lg" onClick={downloadStl} disabled={issues.length>0||seatStatus!=="ready"}><Download/> Download STL</Button><Button variant="outline" size="lg" onClick={downloadScad} disabled={seatStatus!=="ready"||issues.length>0}><FileCode2/> Download OpenSCAD</Button><div className="source-note"><strong>The source needs its seat file</strong><a href="/tclip_clip_seat.stl" download>Download T-Clip seat geometry</a></div><section className="print-card"><div className="print-title"><Wrench/><h3>PETG starting point</h3></div><dl><div><dt>Layer</dt><dd>0.20 mm</dd></div><div><dt>Walls</dt><dd>5–6</dd></div><div><dt>Infill</dt><dd>40% gyroid</dd></div><div><dt>Supports</dt><dd>None</dd></div></dl><p>Print rear face down, with pegs and cradles facing up.</p></section><details><summary>Separate low-profile clips</summary><a href="/tclip_low_profile_unpainted_skadis.stl" download>Unpainted SKÅDIS clip</a><a href="/tclip_low_profile_painted_skadis.stl" download>Painted SKÅDIS clip</a><small>Print {config.clipCount} at 100% infill.</small></details></aside>
+      <section className="preview-panel"><div className="preview-toolbar"><div><p className="eyebrow">Live model</p><h2>{config.baseStyle==="linked"?"Linked frame":"Full supporting back"}</h2></div><div className="dimensions"><span><b>{approximateWidth.toFixed(1)}</b> mm wide</span><span><b>{approximateHeight.toFixed(1)}</b> mm high</span><span><b>{(config.plateThickness+Math.max(config.pegProtrusion,config.feetEnabled?config.cradleDepth:0)).toFixed(1)}</b> mm deep</span></div></div><div className="preview-model-wrap"><ModelCanvas triangles={previewTriangles}/>{seatStatus!=="ready"&&<p className="model-message" role="status">{error||issues[0]||"Running OpenSCAD and checking the solid…"}</p>}</div><div className="measurement-strip"><div><span>{config.pegCount===1?'Peg layout':'Peg centres'}</span><strong>{config.pegCount===1?'Single · centred':`${config.pegSpacing.toFixed(2)} mm`}</strong></div><div><span>{config.feetEnabled?'Foot grid':'Foot supports'}</span><strong>{config.feetEnabled?`${config.footSpacingX.toFixed(2)} × ${config.footSpacingY.toFixed(2)} mm`:'Off'}</strong></div><div><span>{config.feetEnabled?'Upper cradle offset':'SKÅDIS mounts'}</span><strong>{config.feetEnabled?`${config.footOffsetY.toFixed(2)} mm`:`${config.clipCount} T-Clips`}</strong></div></div></section>
+      <aside className="output-panel"><div><p className="eyebrow">Export</p><h2>Download your adapter</h2><p className="output-copy">OpenSCAD chooses the clip positions and builds the STL in your browser. The downloaded source keeps the automatic rules.</p><p className="safety-note">Experimental models; no load rating. Check fit and strength before use. <a href="#disclaimer">Safety &amp; disclaimer</a></p></div>{error&&<div className="issues"><p role="alert">{error}</p><Button variant="outline" onClick={()=>setEpoch(v=>v+1)}>Retry model</Button></div>}{issues.length>0&&<div className="issues" role="alert">{issues.map(issue=><p key={issue}>{issue}</p>)}</div>}<Button className="download-primary" size="lg" onClick={downloadStl} disabled={issues.length>0||seatStatus!=="ready"}><Download/> Download STL</Button><Button variant="outline" size="lg" onClick={downloadScad} disabled={seatStatus!=="ready"||issues.length>0}><FileCode2/> Download OpenSCAD</Button><div className="source-note"><strong>The source needs its seat file</strong><a href="/tclip_clip_seat.stl" download>Download T-Clip seat geometry</a></div><section className="print-card"><div className="print-title"><Wrench/><h3>PETG starting point</h3></div><dl><div><dt>Layer</dt><dd>0.20 mm</dd></div><div><dt>Walls</dt><dd>5–6</dd></div><div><dt>Infill</dt><dd>40% gyroid</dd></div><div><dt>Supports</dt><dd>None</dd></div></dl><p>Print rear face down, with pegs and cradles facing up.</p></section><details><summary>Separate low-profile clips</summary><a href="/tclip_low_profile_unpainted_skadis.stl" download>Unpainted SKÅDIS clip</a><a href="/tclip_low_profile_painted_skadis.stl" download>Painted SKÅDIS clip</a><small>Print {config.clipCount} at 100% infill.</small></details></aside>
     </div>
     <section id="disclaimer" className="legal-notice" aria-labelledby="disclaimer-title">
       <h2 id="disclaimer-title">Safety &amp; disclaimer</h2>
@@ -155,6 +169,6 @@ export default function Home(){
       <p>To the extent permitted by law, this tool and its generated files are provided “as is” and “as available”, without warranty of accuracy, reliability or fitness for a particular purpose. No technical support, maintenance, updates or continued availability are promised.</p>
       <p>Third-party models remain subject to their own licences and attribution requirements, linked below. This notice does not change those licences.</p>
     </section>
-    <footer>T-Clip seats by Line Arc Line · clips by tchoupshop · <a href="/models/ATTRIBUTION.md">Attribution</a> · <a href="/models/LICENSE.txt">Licences</a></footer>
+    <footer>T-Clip seats by Line Arc Line · clips by tchoupshop · <a href="/models/ATTRIBUTION.md">Attribution</a> · <a href="/models/LICENSE.txt">Model licences</a> · <a href="/openscad/NOTICE.md">OpenSCAD engine &amp; licence</a></footer>
   </main>;
 }
